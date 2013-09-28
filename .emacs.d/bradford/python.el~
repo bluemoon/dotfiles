@@ -1,0 +1,162 @@
+(require 'flymake)
+
+(push "~/.virtualenvs/default/bin" exec-path)
+(setenv "PATH"
+        (concat
+         "~/.virtualenvs/default/bin" ":"
+         (getenv "PATH")
+         ))
+
+
+
+(defmacro after (mode &rest body)
+  `(eval-after-load ,mode
+     '(progn ,@body)))
+
+(after 'auto-complete
+       (add-to-list 'ac-dictionary-directories "~/.emacs.d/dict")
+       (setq ac-use-menu-map t)
+       (define-key ac-menu-map "\C-n" 'ac-next)
+       (define-key ac-menu-map "\C-p" 'ac-previous))
+
+(after 'auto-complete-config
+       (ac-config-default)
+       (when (file-exists-p (expand-file-name "/Users/bradfordtoney/.emacs.d/elisp/Pymacs"))
+         (ac-ropemacs-initialize)
+         (ac-ropemacs-setup)))
+
+(after 'auto-complete-autoloads
+       (autoload 'auto-complete-mode "auto-complete" "enable auto-complete-mode" t nil)
+       (add-hook 'python-mode-hook
+                 (lambda ()
+                   (require 'auto-complete-config)
+                   (add-to-list 'ac-sources 'ac-source-ropemacs)
+                   (auto-complete-mode))))
+
+(autoload 'pymacs-apply "pymacs")
+(autoload 'pymacs-call "pymacs")
+(autoload 'pymacs-eval "pymacs" nil t)
+(autoload 'pymacs-exec "pymacs" nil t)
+(autoload 'pymacs-load "pymacs" nil t)
+(pymacs-load "ropemacs" "rope-")
+
+
+(defun python-config-python ()
+  "Configure python.el to defaults of using python."
+  (interactive)
+  (setq python-shell-virtualenv-path "venv"
+        python-shell-interpreter "python"
+        python-shell-prompt-regexp ">>> "
+        python-shell-prompt-output-regexp ""
+        ;; python-shell-setup-codes '(python-shell-completion-setup-code python-ffap-setup-code python-eldoc-setup-code)
+        python-shell-completion-module-string-code ""
+        python-shell-completion-string-code "';'.join(__COMPLETER_all_completions('''%s'''))
+"))
+
+(defun python-config-ipython ()
+  "Configure python.el to handle ipython."
+  (interactive)
+  ;; (add-to-list 'python-shell-setup-codes 'python-shell-icompletion-setup-code)
+  (setq python-shell-interpreter "ipython"
+        python-shell-interpreter-args ""
+        python-shell-prompt-regexp "In \\[[0-9]+\\]: "
+        python-shell-prompt-output-regexp "Out\\[[0-9]+\\]: "
+        ;; python-shell-setup-codes '(python-shell-icompletion-setup-code python-ffap-setup-code python-eldoc-setup-code)
+        python-shell-completion-module-string-code "';'.join(module_completion('''%s'''))\n"
+        python-shell-completion-string-code "';'.join(get_ipython().Completer.all_completions('''%s'''))\n"))
+
+(setq python-shell-icompletion-setup-code "from IPython.core.completerlib import module_completion")
+(setq python-shell-virtualenv-path "~/.virtualenv/default")
+
+;; (after python (python-config-ipython))
+
+(setq ein:use-smartrep nil
+      ein:use-auto-complete t
+      ein:complete-on-dot t
+      ein:notebook-console-executable (expand-file-name "~/.virtualenv/default/bin/ipython")
+      ein:notebook-console-security-dir (expand-file-name "~/.ipython/profile_default/security"))
+
+
+(defun python-modes-init ()
+  "initialization for all python modes"
+  (interactive)
+  (make-face 'font-lock-statement-face)
+  (set-face-attribute
+   'font-lock-statement-face nil :inherit font-lock-variable-name-face)
+  (setq font-lock-statement-face 'font-lock-statement-face)
+  (font-lock-add-keywords
+   'python-mode
+   `((,(rx symbol-start (or "def" "class" "return" "as" "try" "except" "raise") symbol-end)
+      0 font-lock-statement-face)))
+
+
+  (font-lock-add-keywords 'python-mode
+                          `((,(rx symbol-start (or "import" "from")
+                                  symbol-end) 0 font-lock-preprocessor-face)))
+
+
+  (make-face 'font-lock-operator-face)
+  (set-face-attribute
+   'font-lock-operator-face nil :inherit font-lock-keyword-face)
+  (setq font-lock-operator-face 'font-lock-operator-face)
+  (font-lock-add-keywords
+   'python-mode
+   `((,(rx symbol-start (or "in" "and" "or" "is" "not") symbol-end)
+      0 font-lock-operator-face)))
+
+  (font-lock-add-keywords
+   'python-mode
+   `(("^[       ]*\\(@\\)\\([a-zA-Z_][a-zA-Z_0-9.]+\\)\\((.+)\\)?"
+      (1 'font-lock-keyword-face)
+      (2 'font-lock-function-name-face))))
+
+  (local-set-key (kbd "M-n") 'flymake-goto-next-error)
+  (local-set-key (kbd "M-p") 'flymake-goto-prev-error))
+
+;;(after python (python-modes-init))
+
+;;;; pyflakes
+(defun mp-flymake-pyflakes-init (&optional trigger-type)
+  ;; Make sure it's not a remote buffer or flymake would not work
+  (let* ((temp-file (flymake-init-create-temp-buffer-copy
+                     'flymake-create-temp-with-folder-structure))
+         (local-file (file-relative-name
+                      temp-file
+                      (file-name-directory buffer-file-name))))
+    (list (expand-file-name "~/.virtualenv/default/bin/pyflakes") (list temp-file))))
+
+(add-to-list 'flymake-allowed-file-name-masks
+             '("\\.py\\'" mp-flymake-pyflakes-init))
+
+
+
+(add-hook 'python-mode-hook
+         (lambda ()
+          (font-lock-add-keywords nil
+           '(("\\<\\(FIXME\\):" 1
+              font-lock-warning-face t)))))
+
+
+(add-hook 'python-mode-hook
+         (lambda ()
+          (font-lock-add-keywords nil
+           '(("\\<\\(XXX\\):" 1
+              font-lock-warning-face t)))))
+
+
+(add-hook 'python-mode-hook
+         (lambda ()
+          (font-lock-add-keywords nil
+           '(("\\<\\(TODO\\):" 1
+              font-lock-warning-face t)))))
+
+
+(setq py-smart-indentation t)
+(setq require-final-newline t)
+(setq truncate-lines t)
+; truncate lines even in partial-width windows
+(setq truncate-partial-width-windows t)
+
+(require 'flymake-python-pyflakes)
+(add-hook 'python-mode-hook 'flymake-python-pyflakes-load)
+(require 'cython-mode)
